@@ -5,8 +5,8 @@ import datetime
 import requests
 from bs4 import BeautifulSoup
 
-BASE_URL = "https://www.geeksforgeeks.org"
-POTD_URL = "https://practice.geeksforgeeks.org/problem-of-the-day"
+BASE_URL = "https://practice.geeksforgeeks.org"
+POTD_API = "https://practiceapi.geeksforgeeks.org/api/v1/problems-of-day/"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 SESSION_COOKIE = os.getenv("GFG_SESSION")
@@ -32,18 +32,24 @@ def safe_request(url):
         return None
 
 
+# ✅ FIXED: Using official API instead of scraping
 def fetch_potd():
-    res = safe_request(POTD_URL)
+    res = safe_request(POTD_API)
     if not res:
         raise Exception("POTD fetch failed")
 
-    soup = BeautifulSoup(res.text, "html.parser")
+    data = res.json()
 
-    link_tag = soup.select_one("a[href*='/problems/']")
-    if not link_tag:
-        raise Exception("POTD link not found")
+    try:
+        problem = data["problem_of_the_day"]
 
-    return link_tag.text.strip(), BASE_URL + link_tag.get("href")
+        name = problem["problem_name"]
+        link = BASE_URL + problem["problem_url"]
+
+        return name, link
+    except Exception:
+        print("[DEBUG] API response:", data)
+        raise Exception("POTD parsing failed")
 
 
 def fetch_problem_details(link):
@@ -58,12 +64,15 @@ def fetch_problem_details(link):
 
     tags = [t.text.strip() for t in soup.select(".tag")] or []
 
+    # Slightly safer difficulty detection
     difficulty = "Medium"
-    text = res.text.lower()
-    if "easy" in text:
-        difficulty = "Easy"
-    elif "hard" in text:
-        difficulty = "Hard"
+    diff_tag = soup.find(string=re.compile("Difficulty", re.IGNORECASE))
+    if diff_tag:
+        parent_text = diff_tag.find_parent().text.lower()
+        if "easy" in parent_text:
+            difficulty = "Easy"
+        elif "hard" in parent_text:
+            difficulty = "Hard"
 
     return {
         "description": description.text.strip() if description else "",
@@ -77,8 +86,12 @@ def fetch_submission():
     if SESSION_COOKIE:
         try:
             cookies = {"gfg_session_id": SESSION_COOKIE}
-            res = requests.get("https://practice.geeksforgeeks.org/submissions/",
-                               headers=HEADERS, cookies=cookies)
+            res = requests.get(
+                "https://practice.geeksforgeeks.org/submissions/",
+                headers=HEADERS,
+                cookies=cookies,
+                timeout=15
+            )
 
             if res.status_code == 200:
                 return {
@@ -89,8 +102,8 @@ def fetch_submission():
                     "memory": "30 MB",
                     "memory_percent": "78%"
                 }
-        except:
-            pass
+        except Exception as e:
+            print("[WARN] Submission fetch failed:", e)
 
     if os.path.exists("solution.txt"):
         with open("solution.txt") as f:
@@ -131,6 +144,8 @@ def main():
     today = get_today_date_ist().strftime("%Y-%m-%d")
 
     name, link = fetch_potd()
+    print(f"[INFO] POTD: {name}")
+
     details = fetch_problem_details(link)
     submission = fetch_submission()
 
@@ -142,7 +157,7 @@ def main():
         "Hard": "Difficulty-Hard"
     }
 
-    base_folder = f"{diff_map[details['difficulty']]}/{slug}"
+    base_folder = f"{diff_map.get(details['difficulty'], 'Difficulty-Medium')}/{slug}"
     os.makedirs(base_folder, exist_ok=True)
 
     ext_map = {"Java": "java", "Python": "py", "C++": "cpp"}
