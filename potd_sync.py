@@ -15,8 +15,7 @@ SESSION_COOKIE = os.getenv("GFG_SESSION")
 
 def slugify(text):
     text = text.lower()
-    text = re.sub(r'[^a-z0-9]+', '-', text)
-    return text.strip('-')
+    return re.sub(r'[^a-z0-9]+', '-', text).strip('-')
 
 def safe_request(url):
     try:
@@ -26,15 +25,12 @@ def safe_request(url):
     except:
         return None
 
-def get_ist_datetime():
-    return datetime.utcnow() + timedelta(hours=5, minutes=30)
-
-def parse_date_input(date_str):
+def parse_date(date_str):
     return datetime.strptime(date_str, "%Y-%m-%d") if date_str else None
 
 def get_date_range():
-    start = parse_date_input(os.getenv("START_DATE", "").strip())
-    end = parse_date_input(os.getenv("END_DATE", "").strip())
+    start = parse_date(os.getenv("START_DATE", "").strip())
+    end = parse_date(os.getenv("END_DATE", "").strip())
     return start, end
 
 def fetch_archive_problems():
@@ -66,7 +62,7 @@ def fetch_today_potd():
     name, link = data.get("problem_name"), data.get("problem_url")
     if not name or not link:
         return []
-    return [{"date": get_ist_datetime(), "name": name, "link": link}]
+    return [{"date": datetime.utcnow() + timedelta(hours=5, minutes=30), "name": name, "link": link}]
 
 def fetch_problem_details(link):
     res = safe_request(link)
@@ -128,9 +124,10 @@ def main():
         problems = fetch_archive_problems()
         problems_in_range = [p for p in problems if start_date <= p["date"] <= end_date]
         if not problems_in_range:
-            return
+            problems_in_range = fetch_today_potd()
     else:
         problems_in_range = fetch_today_potd()
+
     for prob in problems_in_range:
         today_str = prob["date"].strftime("%Y-%m-%d")
         try:
