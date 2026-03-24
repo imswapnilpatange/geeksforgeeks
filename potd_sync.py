@@ -32,7 +32,6 @@ def safe_request(url):
         return None
 
 
-# ✅ FIXED: Using official API instead of scraping
 def fetch_potd():
     res = safe_request(POTD_API)
     if not res:
@@ -40,16 +39,23 @@ def fetch_potd():
 
     data = res.json()
 
-    try:
-        problem = data["problem_of_the_day"]
+    print("[DEBUG] API keys:", data.keys())
 
-        name = problem["problem_name"]
-        link = BASE_URL + problem["problem_url"]
+    problem = data.get("problem_of_the_day") or data.get("data")
 
-        return name, link
-    except Exception:
-        print("[DEBUG] API response:", data)
+    if not problem:
+        print("[DEBUG] Full response:", data)
         raise Exception("POTD parsing failed")
+
+    name = problem.get("problem_name")
+    url = problem.get("problem_url")
+
+    if not name or not url:
+        print("[DEBUG] Problem object:", problem)
+        raise Exception("Invalid POTD data")
+
+    link = BASE_URL + url
+    return name, link
 
 
 def fetch_problem_details(link):
