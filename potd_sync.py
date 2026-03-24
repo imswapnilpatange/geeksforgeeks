@@ -13,6 +13,9 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 SESSION_COOKIE = os.getenv("GFG_SESSION")
 
 
+# -----------------------------
+# Helper Functions
+# -----------------------------
 def slugify(text):
     text = text.lower()
     text = re.sub(r'[^a-z0-9]+', '-', text)
@@ -29,18 +32,27 @@ def safe_request(url):
         return None
 
 
+def get_ist_datetime():
+    """Return current IST datetime"""
+    return datetime.utcnow() + timedelta(hours=5, minutes=30)
+
+
+def parse_date_input(date_str):
+    """Parse startDate/endDate inputs as IST date"""
+    return datetime.strptime(date_str, "%Y-%m-%d") if date_str else None
+
+
 def get_date_range():
-    start = os.getenv("START_DATE", "").strip()
-    end = os.getenv("END_DATE", "").strip()
-    if start and end:
-        start_date = datetime.strptime(start, "%Y-%m-%d")
-        end_date = datetime.strptime(end, "%Y-%m-%d")
-        return start_date, end_date
-    return None, None
+    start = parse_date_input(os.getenv("START_DATE", "").strip())
+    end = parse_date_input(os.getenv("END_DATE", "").strip())
+    return start, end
 
 
+# -----------------------------
+# Fetch POTDs
+# -----------------------------
 def fetch_archive_problems():
-    """Fetch all POTDs from archive page."""
+    """Fetch all POTDs from archive page"""
     res = safe_request(ARCHIVE_URL)
     if not res:
         raise Exception("Failed to fetch POTD archive")
@@ -69,6 +81,7 @@ def fetch_archive_problems():
 
 
 def fetch_today_potd():
+    """Fetch today's POTD using API"""
     res = safe_request(TODAY_API)
     if not res:
         raise Exception("Failed to fetch today's POTD")
@@ -78,19 +91,21 @@ def fetch_today_potd():
     if not name or not link:
         raise Exception("Today's POTD parsing failed")
     return [{
-        "date": datetime.utcnow(),
+        "date": get_ist_datetime(),
         "name": name,
         "link": link
     }]
 
 
+# -----------------------------
+# Problem Details and Submission
+# -----------------------------
 def fetch_problem_details(link):
     res = safe_request(link)
     if not res:
         raise Exception("Problem fetch failed")
 
     soup = BeautifulSoup(res.text, "html.parser")
-
     description = soup.select_one(".problem-description")
     constraints = soup.find(string=re.compile("Constraints"))
 
@@ -165,6 +180,9 @@ def generate_readme(name, details, link, date_str):
 """
 
 
+# -----------------------------
+# Main Function
+# -----------------------------
 def main():
     start_date, end_date = get_date_range()
     if start_date and end_date:
@@ -177,7 +195,8 @@ def main():
         problems_in_range = fetch_today_potd()
 
     for prob in problems_in_range:
-        today_str = prob["date"].strftime("%Y-%m-%d")
+        ist_date = prob["date"] + timedelta(hours=5, minutes=30) if prob["date"].tzinfo is None else prob["date"]
+        today_str = ist_date.strftime("%Y-%m-%d")
         print(f"[INFO] Processing POTD: {today_str} — {prob['name']}")
         try:
             details = fetch_problem_details(prob["link"])
