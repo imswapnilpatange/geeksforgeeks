@@ -4,16 +4,26 @@ import json
 import datetime
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime, timedelta
 
 BASE_URL = "https://practice.geeksforgeeks.org"
-POTD_API = "https://practiceapi.geeksforgeeks.org/api/v1/problems-of-day/"
+POTD_DATE_URL = "https://practice.geeksforgeeks.org/problem-of-the-day/{year}/{month}/{day}"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 SESSION_COOKIE = os.getenv("GFG_SESSION")
 
 
-def get_today_date_ist():
-    return datetime.datetime.utcnow() + datetime.timedelta(hours=5, minutes=30)
+def get_date_range():
+    start = os.getenv("START_DATE")
+    end = os.getenv("END_DATE")
+
+    if not start or not end:
+        raise Exception("START_DATE or END_DATE missing")
+
+    start_date = datetime.strptime(start, "%Y-%m-%d")
+    end_date = datetime.strptime(end, "%Y-%m-%d")
+
+    return start_date, end_date
 
 
 def slugify(text):
@@ -32,24 +42,31 @@ def safe_request(url):
         return None
 
 
-def fetch_potd():
-    url = "https://practiceapi.geeksforgeeks.org/api/vr/problems-of-day/problem/today/"
+def fetch_potd_for_date(date_obj):
+    y = date_obj.strftime("%Y")
+    m = date_obj.strftime("%m")
+    d = date_obj.strftime("%d")
+
+    url = POTD_DATE_URL.format(year=y, month=m, day=d)
+    print(f"[INFO] Fetching POTD page: {url}")
 
     res = safe_request(url)
     if not res:
-        raise Exception("POTD fetch failed")
+        raise Exception(f"POTD page fetch failed for {y}-{m}-{d}")
 
-    data = res.json()
+    soup = BeautifulSoup(res.text, "html.parser")
 
-    try:
-        # ✅ API already returns problem directly
-        name = data["problem_name"]
-        link = data["problem_url"]   # already full URL
+    # POTD link is typically inside <a href="/problems/...">
+    link_tag = soup.find("a", href=re.compile(r"/problems/"))
+    if not link_tag:
+        raise Exception(f"POTD link not found on date page {url}")
 
-        return name, link
-    except Exception:
-        print("[DEBUG] API response:", data)
-        raise Exception("POTD parsing failed")
+    problem_name = link_tag.text.strip()
+    problem_href = link_tag.get("href")
+
+    # full problem URL
+    problem_link = BASE_URL + problem_href
+    return problem_name, problem_link
 
 
 def fetch_problem_details(link):
@@ -64,7 +81,6 @@ def fetch_problem_details(link):
 
     tags = [t.text.strip() for t in soup.select(".tag")] or []
 
-    # Slightly safer difficulty detection
     difficulty = "Medium"
     diff_tag = soup.find(string=re.compile("Difficulty", re.IGNORECASE))
     if diff_tag:
@@ -119,8 +135,8 @@ def fetch_submission():
     return None
 
 
-def generate_readme(name, details, link):
-    return f"""# {name}
+def generate_readme(name, details, link, date_str):
+    return f"""# {name} — POTD {date_str}
 
 ## Problem Description
 {details['description']}
@@ -133,65 +149,62 @@ def generate_readme(name, details, link):
 
 ## Link
 {link}
-
-## Complexity
-- Time: TBD
-- Space: TBD
 """
 
 
 def main():
-    today = get_today_date_ist().strftime("%Y-%m-%d")
+    start_date, end_date = get_date_range()
+    current = start_date
 
-    name, link = fetch_potd()
-    print(f"[INFO] POTD: {name}")
+    while current <= end_date:
+        today_str = current.strftime("%Y-%m-%d")
+        print(f"[INFO] Processing date: {today_str}")
 
-    details = fetch_problem_details(link)
-    submission = fetch_submission()
+        try:
+            name, link = fetch_potd_for_date(current)
+            details = fetch_problem_details(link)
+            submission = fetch_submission()
 
-    slug = f"{today}-{slugify(name)}"
+            slug = f"{today_str}-{slugify(name)}"
+            diff_map = {"Easy": "Difficulty-Easy", "Medium": "Difficulty-Medium", "Hard": "Difficulty-Hard"}
+            base_folder = f"{diff_map.get(details['difficulty'], 'Difficulty-Medium')}/{slug}"
+            os.makedirs(base_folder, exist_ok=True)
 
-    diff_map = {
-        "Easy": "Difficulty-Easy",
-        "Medium": "Difficulty-Medium",
-        "Hard": "Difficulty-Hard"
-    }
+            ext_map = {"Java": "java", "Python": "py", "C++": "cpp"}
+            lang = submission["language"] if submission else "Java"
+            ext = ext_map.get(lang, "txt")
 
-    base_folder = f"{diff_map.get(details['difficulty'], 'Difficulty-Medium')}/{slug}"
-    os.makedirs(base_folder, exist_ok=True)
+            solution_path = f"{base_folder}/{slug}.{ext}"
+            with open(solution_path, "w") as f:
+                f.write(submission["code"] if submission else "// No submission")
 
-    ext_map = {"Java": "java", "Python": "py", "C++": "cpp"}
-    lang = submission["language"] if submission else "Java"
-    ext = ext_map.get(lang, "txt")
+            with open(f"{base_folder}/README.md", "w") as f:
+                f.write(generate_readme(name, details, link, today_str))
 
-    solution_path = f"{base_folder}/{slug}.{ext}"
+            metadata = {
+                "date": today_str,
+                "problem_name": name,
+                "difficulty": details["difficulty"],
+                "tags": details["tags"],
+                "language": lang,
+                "runtime": submission["runtime"] if submission else "",
+                "runtime_percent": submission["runtime_percent"] if submission else "",
+                "memory": submission["memory"] if submission else "",
+                "memory_percent": submission["memory_percent"] if submission else "",
+                "link": link
+            }
 
-    with open(solution_path, "w") as f:
-        f.write(submission["code"] if submission else "// No submission")
+            with open(f"{base_folder}/metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
 
-    with open(f"{base_folder}/README.md", "w") as f:
-        f.write(generate_readme(name, details, link))
+            # write commit message for this date
+            with open("commit_msg.txt", "w") as f:
+                f.write(f"{today_str} — {name} | {details['difficulty']}")
 
-    metadata = {
-        "date": today,
-        "problem_name": name,
-        "difficulty": details["difficulty"],
-        "tags": details["tags"],
-        "language": lang,
-        "runtime": submission["runtime"] if submission else "",
-        "runtime_percent": submission["runtime_percent"] if submission else "",
-        "memory": submission["memory"] if submission else "",
-        "memory_percent": submission["memory_percent"] if submission else "",
-        "link": link
-    }
+        except Exception as e:
+            print(f"[ERROR] Failed for {today_str}: {e}")
 
-    with open(f"{base_folder}/metadata.json", "w") as f:
-        json.dump(metadata, f, indent=2)
-
-    commit_msg = f"{name} | Time: ({metadata['runtime_percent']}), Space: ({metadata['memory_percent']}) | Tags: {', '.join(details['tags'])}"
-
-    with open("commit_msg.txt", "w") as f:
-        f.write(commit_msg)
+        current += timedelta(days=1)
 
 
 if __name__ == "__main__":
