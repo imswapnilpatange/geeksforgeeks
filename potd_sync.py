@@ -42,10 +42,9 @@ def fetch_potd():
     data = res.json()
 
     try:
-        problem = data["data"]
-
-        name = problem["problem_name"]
-        link = BASE_URL + problem["problem_url"]
+        # ✅ API already returns problem directly
+        name = data["problem_name"]
+        link = data["problem_url"]   # already full URL
 
         return name, link
     except Exception:
