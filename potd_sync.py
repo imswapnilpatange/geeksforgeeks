@@ -33,29 +33,24 @@ def safe_request(url):
 
 
 def fetch_potd():
-    res = safe_request(POTD_API)
+    url = "https://practiceapi.geeksforgeeks.org/api/vr/problems-of-day/problem/today/"
+
+    res = safe_request(url)
     if not res:
         raise Exception("POTD fetch failed")
 
     data = res.json()
 
-    print("[DEBUG] API keys:", data.keys())
+    try:
+        problem = data["data"]
 
-    problem = data.get("problem_of_the_day") or data.get("data")
+        name = problem["problem_name"]
+        link = BASE_URL + problem["problem_url"]
 
-    if not problem:
-        print("[DEBUG] Full response:", data)
+        return name, link
+    except Exception:
+        print("[DEBUG] API response:", data)
         raise Exception("POTD parsing failed")
-
-    name = problem.get("problem_name")
-    url = problem.get("problem_url")
-
-    if not name or not url:
-        print("[DEBUG] Problem object:", problem)
-        raise Exception("Invalid POTD data")
-
-    link = BASE_URL + url
-    return name, link
 
 
 def fetch_problem_details(link):
