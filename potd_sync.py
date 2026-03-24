@@ -1,9 +1,10 @@
 import os
 import re
 import json
-import requests
 from datetime import datetime, timedelta
+import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 BASE_URL = "https://www.geeksforgeeks.org"
 ARCHIVE_URL = f"{BASE_URL}/problem-of-the-day/"
@@ -33,12 +34,10 @@ def safe_request(url):
 
 
 def get_ist_datetime():
-    """Return current IST datetime"""
     return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
 
 def parse_date_input(date_str):
-    """Parse startDate/endDate inputs as IST date"""
     return datetime.strptime(date_str, "%Y-%m-%d") if date_str else None
 
 
@@ -52,14 +51,12 @@ def get_date_range():
 # Fetch POTDs
 # -----------------------------
 def fetch_archive_problems():
-    """Fetch all POTDs from archive page"""
     res = safe_request(ARCHIVE_URL)
     if not res:
         raise Exception("Failed to fetch POTD archive")
 
     soup = BeautifulSoup(res.text, "html.parser")
     problems = []
-
     entries = soup.select(".problem-of-the-day")
     for entry in entries:
         date_tag = entry.select_one(".date")
@@ -81,7 +78,6 @@ def fetch_archive_problems():
 
 
 def fetch_today_potd():
-    """Fetch today's POTD using API"""
     res = safe_request(TODAY_API)
     if not res:
         raise Exception("Failed to fetch today's POTD")
@@ -98,7 +94,7 @@ def fetch_today_potd():
 
 
 # -----------------------------
-# Problem Details and Submission
+# Problem Details
 # -----------------------------
 def fetch_problem_details(link):
     res = safe_request(link)
@@ -108,7 +104,6 @@ def fetch_problem_details(link):
     soup = BeautifulSoup(res.text, "html.parser")
     description = soup.select_one(".problem-description")
     constraints = soup.find(string=re.compile("Constraints"))
-
     tags = [t.text.strip() for t in soup.select(".tag")] or []
 
     difficulty = "Medium"
@@ -128,41 +123,48 @@ def fetch_problem_details(link):
     }
 
 
-def fetch_submission():
-    if SESSION_COOKIE:
-        try:
-            cookies = {"gfg_session_id": SESSION_COOKIE}
-            res = requests.get(
-                "https://practice.geeksforgeeks.org/submissions/",
-                headers=HEADERS,
-                cookies=cookies,
-                timeout=15
-            )
-            if res.status_code == 200:
-                return {
-                    "code": "// fetched code",
-                    "language": "Java",
-                    "runtime": "120 ms",
-                    "runtime_percent": "85%",
-                    "memory": "30 MB",
-                    "memory_percent": "78%"
-                }
-        except Exception as e:
-            print("[WARN] Submission fetch failed:", e)
+# -----------------------------
+# Fetch latest submission using Playwright
+# -----------------------------
+def fetch_submission(problem_name=None):
+    # fallback to solution.txt if something fails
+    submission = {"code": "// No submission", "language": "Java", "runtime": "", "runtime_percent": "", "memory": "", "memory_percent": ""}
 
     if os.path.exists("solution.txt"):
         with open("solution.txt") as f:
-            return {
-                "code": f.read(),
-                "language": "Java",
-                "runtime": "",
-                "runtime_percent": "",
-                "memory": "",
-                "memory_percent": ""
-            }
-    return None
+            submission["code"] = f.read()
+            return submission
+
+    if not SESSION_COOKIE or not problem_name:
+        return submission
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.context.add_cookies([{"name": "gfg_session_id", "value": SESSION_COOKIE, "domain": ".geeksforgeeks.org", "path": "/"}])
+            page.goto("https://practice.geeksforgeeks.org/submissions/")
+            page.wait_for_timeout(3000)  # wait for page to load
+
+            # Find the first submission for the problem
+            # Assuming problem name appears as link text
+            row = page.query_selector(f"tr:has-text('{problem_name}')")
+            if row:
+                row.click()
+                page.wait_for_timeout(2000)
+                code_area = page.query_selector("pre") or page.query_selector("textarea")
+                if code_area:
+                    submission["code"] = code_area.inner_text()
+            browser.close()
+    except Exception as e:
+        print("[WARN] Could not fetch submission via Playwright:", e)
+
+    return submission
 
 
+# -----------------------------
+# README generator
+# -----------------------------
 def generate_readme(name, details, link, date_str):
     return f"""# {name} — POTD {date_str}
 
@@ -181,7 +183,7 @@ def generate_readme(name, details, link, date_str):
 
 
 # -----------------------------
-# Main Function
+# Main
 # -----------------------------
 def main():
     start_date, end_date = get_date_range()
@@ -195,12 +197,11 @@ def main():
         problems_in_range = fetch_today_potd()
 
     for prob in problems_in_range:
-        ist_date = prob["date"] + timedelta(hours=5, minutes=30) if prob["date"].tzinfo is None else prob["date"]
-        today_str = ist_date.strftime("%Y-%m-%d")
+        today_str = prob["date"].strftime("%Y-%m-%d")
         print(f"[INFO] Processing POTD: {today_str} — {prob['name']}")
         try:
             details = fetch_problem_details(prob["link"])
-            submission = fetch_submission()
+            submission = fetch_submission(prob["name"])
 
             slug = f"{today_str}-{slugify(prob['name'])}"
             diff_map = {"Easy": "Difficulty-Easy", "Medium": "Difficulty-Medium", "Hard": "Difficulty-Hard"}
@@ -208,12 +209,12 @@ def main():
             os.makedirs(base_folder, exist_ok=True)
 
             ext_map = {"Java": "java", "Python": "py", "C++": "cpp"}
-            lang = submission["language"] if submission else "Java"
+            lang = submission.get("language", "Java")
             ext = ext_map.get(lang, "txt")
 
             solution_path = f"{base_folder}/{slug}.{ext}"
             with open(solution_path, "w") as f:
-                f.write(submission["code"] if submission else "// No submission")
+                f.write(submission.get("code", "// No submission"))
 
             with open(f"{base_folder}/README.md", "w") as f:
                 f.write(generate_readme(prob["name"], details, prob["link"], today_str))
@@ -224,10 +225,10 @@ def main():
                 "difficulty": details["difficulty"],
                 "tags": details["tags"],
                 "language": lang,
-                "runtime": submission["runtime"] if submission else "",
-                "runtime_percent": submission["runtime_percent"] if submission else "",
-                "memory": submission["memory"] if submission else "",
-                "memory_percent": submission["memory_percent"] if submission else "",
+                "runtime": submission.get("runtime", ""),
+                "runtime_percent": submission.get("runtime_percent", ""),
+                "memory": submission.get("memory", ""),
+                "memory_percent": submission.get("memory_percent", ""),
                 "link": prob["link"]
             }
 
