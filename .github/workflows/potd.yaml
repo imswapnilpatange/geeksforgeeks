@@ -22,11 +22,11 @@ on:
         type: string
       startDate:
         description: "Start date (YYYY-MM-DD)"
-        required: true
+        required: false
         type: string
       endDate:
         description: "End date (YYYY-MM-DD)"
-        required: true
+        required: false
         type: string
 
 jobs:
@@ -52,8 +52,8 @@ jobs:
           GFG_SESSION: ${{ secrets.GFG_SESSION }}
           LANGUAGE: ${{ github.event.inputs.language || 'java' }}
           MEMORY: ${{ github.event.inputs.memory || '512' }}
-          START_DATE: ${{ github.event.inputs.startDate }}
-          END_DATE: ${{ github.event.inputs.endDate }}
+          START_DATE: ${{ github.event.inputs.startDate || '' }}
+          END_DATE: ${{ github.event.inputs.endDate || '' }}
         run: python potd_sync.py
 
       - name: Commit changes
