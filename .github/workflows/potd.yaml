@@ -72,5 +72,7 @@ jobs:
           MSG=$(cat commit_msg.txt)
           git commit -m "$MSG"
 
-          git pull --rebase origin main
-          git push
+          # Sync with latest remote and force push
+          git fetch origin main
+          git reset --hard origin/main
+          git push origin main --force
