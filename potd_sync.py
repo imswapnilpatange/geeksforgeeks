@@ -1,13 +1,12 @@
 import os
 import re
 import json
-import datetime
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 
-BASE_URL = "https://practice.geeksforgeeks.org"
-POTD_DATE_URL = "https://practice.geeksforgeeks.org/problem-of-the-day/{year}/{month}/{day}"
+BASE_URL = "https://www.geeksforgeeks.org"
+ARCHIVE_URL = f"{BASE_URL}/problem-of-the-day/"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 SESSION_COOKIE = os.getenv("GFG_SESSION")
@@ -16,13 +15,10 @@ SESSION_COOKIE = os.getenv("GFG_SESSION")
 def get_date_range():
     start = os.getenv("START_DATE")
     end = os.getenv("END_DATE")
-
     if not start or not end:
         raise Exception("START_DATE or END_DATE missing")
-
     start_date = datetime.strptime(start, "%Y-%m-%d")
     end_date = datetime.strptime(end, "%Y-%m-%d")
-
     return start_date, end_date
 
 
@@ -42,31 +38,34 @@ def safe_request(url):
         return None
 
 
-def fetch_potd_for_date(date_obj):
-    y = date_obj.strftime("%Y")
-    m = date_obj.strftime("%m")
-    d = date_obj.strftime("%d")
-
-    url = POTD_DATE_URL.format(year=y, month=m, day=d)
-    print(f"[INFO] Fetching POTD page: {url}")
-
-    res = safe_request(url)
+def fetch_archive_problems():
+    """Fetch all POTDs from archive page."""
+    res = safe_request(ARCHIVE_URL)
     if not res:
-        raise Exception(f"POTD page fetch failed for {y}-{m}-{d}")
+        raise Exception("Failed to fetch POTD archive")
 
     soup = BeautifulSoup(res.text, "html.parser")
+    problems = []
 
-    # POTD link is typically inside <a href="/problems/...">
-    link_tag = soup.find("a", href=re.compile(r"/problems/"))
-    if not link_tag:
-        raise Exception(f"POTD link not found on date page {url}")
-
-    problem_name = link_tag.text.strip()
-    problem_href = link_tag.get("href")
-
-    # full problem URL
-    problem_link = BASE_URL + problem_href
-    return problem_name, problem_link
+    # GFG uses a container per problem
+    entries = soup.select(".problem-of-the-day")  # adjust selector if needed
+    for entry in entries:
+        date_tag = entry.select_one(".date")
+        link_tag = entry.select_one("a[href*='/problems/']")
+        if date_tag and link_tag:
+            try:
+                date_str = date_tag.text.strip()
+                problem_date = datetime.strptime(date_str, "%B %d, %Y")
+                problem_name = link_tag.text.strip()
+                problem_href = link_tag.get("href")
+                problems.append({
+                    "date": problem_date,
+                    "name": problem_name,
+                    "link": BASE_URL + problem_href
+                })
+            except Exception:
+                continue
+    return problems
 
 
 def fetch_problem_details(link):
@@ -83,7 +82,7 @@ def fetch_problem_details(link):
 
     difficulty = "Medium"
     diff_tag = soup.find(string=re.compile("Difficulty", re.IGNORECASE))
-    if diff_tag:
+    if diff_tag and diff_tag.find_parent():
         parent_text = diff_tag.find_parent().text.lower()
         if "easy" in parent_text:
             difficulty = "Easy"
@@ -108,7 +107,6 @@ def fetch_submission():
                 cookies=cookies,
                 timeout=15
             )
-
             if res.status_code == 200:
                 return {
                     "code": "// fetched code",
@@ -131,7 +129,6 @@ def fetch_submission():
                 "memory": "",
                 "memory_percent": ""
             }
-
     return None
 
 
@@ -154,18 +151,23 @@ def generate_readme(name, details, link, date_str):
 
 def main():
     start_date, end_date = get_date_range()
-    current = start_date
+    problems = fetch_archive_problems()
 
-    while current <= end_date:
-        today_str = current.strftime("%Y-%m-%d")
-        print(f"[INFO] Processing date: {today_str}")
+    # filter problems by input date range
+    problems_in_range = [p for p in problems if start_date <= p["date"] <= end_date]
 
+    if not problems_in_range:
+        print("[INFO] No POTDs found in the specified date range.")
+        return
+
+    for prob in problems_in_range:
+        today_str = prob["date"].strftime("%Y-%m-%d")
+        print(f"[INFO] Processing POTD: {today_str} — {prob['name']}")
         try:
-            name, link = fetch_potd_for_date(current)
-            details = fetch_problem_details(link)
+            details = fetch_problem_details(prob["link"])
             submission = fetch_submission()
 
-            slug = f"{today_str}-{slugify(name)}"
+            slug = f"{today_str}-{slugify(prob['name'])}"
             diff_map = {"Easy": "Difficulty-Easy", "Medium": "Difficulty-Medium", "Hard": "Difficulty-Hard"}
             base_folder = f"{diff_map.get(details['difficulty'], 'Difficulty-Medium')}/{slug}"
             os.makedirs(base_folder, exist_ok=True)
@@ -179,11 +181,11 @@ def main():
                 f.write(submission["code"] if submission else "// No submission")
 
             with open(f"{base_folder}/README.md", "w") as f:
-                f.write(generate_readme(name, details, link, today_str))
+                f.write(generate_readme(prob["name"], details, prob["link"], today_str))
 
             metadata = {
                 "date": today_str,
-                "problem_name": name,
+                "problem_name": prob["name"],
                 "difficulty": details["difficulty"],
                 "tags": details["tags"],
                 "language": lang,
@@ -191,20 +193,17 @@ def main():
                 "runtime_percent": submission["runtime_percent"] if submission else "",
                 "memory": submission["memory"] if submission else "",
                 "memory_percent": submission["memory_percent"] if submission else "",
-                "link": link
+                "link": prob["link"]
             }
 
             with open(f"{base_folder}/metadata.json", "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            # write commit message for this date
             with open("commit_msg.txt", "w") as f:
-                f.write(f"{today_str} — {name} | {details['difficulty']}")
+                f.write(f"{today_str} — {prob['name']} | {details['difficulty']}")
 
         except Exception as e:
             print(f"[ERROR] Failed for {today_str}: {e}")
-
-        current += timedelta(days=1)
 
 
 if __name__ == "__main__":
