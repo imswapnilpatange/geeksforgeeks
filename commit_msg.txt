@@ -1,1 +1,1 @@
-Minimum height roots | Time: (), Space: () | Tags: 
+2026-03-24 — Minimum height roots | Medium
