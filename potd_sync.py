@@ -93,10 +93,6 @@ def fetch_problem_details(link):
 
 def fetch_latest_submission():
     submission = {"code": "// No submission", "language": "Java", "runtime": "", "runtime_percent": "", "memory": "", "memory_percent": ""}
-    if os.path.exists("solution.txt"):
-        with open("solution.txt") as f:
-            submission["code"] = f.read()
-        return submission
     if not SESSION_COOKIE:
         return submission
     try:
