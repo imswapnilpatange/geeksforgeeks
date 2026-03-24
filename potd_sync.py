@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import shutil
 from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
@@ -9,7 +10,6 @@ from playwright.sync_api import sync_playwright
 BASE_URL = "https://www.geeksforgeeks.org"
 ARCHIVE_URL = f"{BASE_URL}/problem-of-the-day/"
 TODAY_API = "https://practiceapi.geeksforgeeks.org/api/vr/problems-of-day/problem/today/"
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 SESSION_COOKIE = os.getenv("GFG_SESSION")
 
@@ -136,32 +136,42 @@ def main():
             slug = f"{today_str}-{slugify(prob['name'])}"
             diff_map = {"Easy": "Difficulty-Easy", "Medium": "Difficulty-Medium", "Hard": "Difficulty-Hard"}
             base_folder = f"{diff_map.get(details['difficulty'], 'Difficulty-Medium')}/{slug}"
+
+            # Delete old folder to force Git to see changes
+            if os.path.exists(base_folder):
+                shutil.rmtree(base_folder)
             os.makedirs(base_folder, exist_ok=True)
+
             ext_map = {"Java": "java", "Python": "py", "C++": "cpp"}
             lang = submission.get("language", "Java")
             ext = ext_map.get(lang, "txt")
             solution_path = f"{base_folder}/{slug}.{ext}"
+
+            # Write latest submission
             with open(solution_path, "w") as f:
                 f.write(submission.get("code", "// No submission"))
             with open(f"{base_folder}/README.md", "w") as f:
                 f.write(generate_readme(prob["name"], details, prob["link"], today_str))
-            metadata = {
-                "date": today_str,
-                "problem_name": prob["name"],
-                "difficulty": details["difficulty"],
-                "tags": details["tags"],
-                "language": lang,
-                "runtime": submission.get("runtime", ""),
-                "runtime_percent": submission.get("runtime_percent", ""),
-                "memory": submission.get("memory", ""),
-                "memory_percent": submission.get("memory_percent", ""),
-                "link": prob["link"]
-            }
             with open(f"{base_folder}/metadata.json", "w") as f:
-                json.dump(metadata, f, indent=2)
+                json.dump({
+                    "date": today_str,
+                    "problem_name": prob["name"],
+                    "difficulty": details["difficulty"],
+                    "tags": details["tags"],
+                    "language": lang,
+                    "runtime": submission.get("runtime", ""),
+                    "runtime_percent": submission.get("runtime_percent", ""),
+                    "memory": submission.get("memory", ""),
+                    "memory_percent": submission.get("memory_percent", ""),
+                    "link": prob["link"]
+                }, f, indent=2)
+
+            # Commit message
             with open("commit_msg.txt", "w") as f:
                 f.write(f"{today_str} — {prob['name']} | {details['difficulty']}")
-        except:
+
+        except Exception as e:
+            print(f"[WARN] Failed to process {today_str} — {prob['name']}: {e}")
             continue
 
 if __name__ == "__main__":
