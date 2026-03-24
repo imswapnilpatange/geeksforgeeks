@@ -7,19 +7,10 @@ from bs4 import BeautifulSoup
 
 BASE_URL = "https://www.geeksforgeeks.org"
 ARCHIVE_URL = f"{BASE_URL}/problem-of-the-day/"
+TODAY_API = "https://practiceapi.geeksforgeeks.org/api/vr/problems-of-day/problem/today/"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 SESSION_COOKIE = os.getenv("GFG_SESSION")
-
-
-def get_date_range():
-    start = os.getenv("START_DATE")
-    end = os.getenv("END_DATE")
-    if not start or not end:
-        raise Exception("START_DATE or END_DATE missing")
-    start_date = datetime.strptime(start, "%Y-%m-%d")
-    end_date = datetime.strptime(end, "%Y-%m-%d")
-    return start_date, end_date
 
 
 def slugify(text):
@@ -38,6 +29,16 @@ def safe_request(url):
         return None
 
 
+def get_date_range():
+    start = os.getenv("START_DATE", "").strip()
+    end = os.getenv("END_DATE", "").strip()
+    if start and end:
+        start_date = datetime.strptime(start, "%Y-%m-%d")
+        end_date = datetime.strptime(end, "%Y-%m-%d")
+        return start_date, end_date
+    return None, None
+
+
 def fetch_archive_problems():
     """Fetch all POTDs from archive page."""
     res = safe_request(ARCHIVE_URL)
@@ -47,8 +48,7 @@ def fetch_archive_problems():
     soup = BeautifulSoup(res.text, "html.parser")
     problems = []
 
-    # GFG uses a container per problem
-    entries = soup.select(".problem-of-the-day")  # adjust selector if needed
+    entries = soup.select(".problem-of-the-day")
     for entry in entries:
         date_tag = entry.select_one(".date")
         link_tag = entry.select_one("a[href*='/problems/']")
@@ -66,6 +66,22 @@ def fetch_archive_problems():
             except Exception:
                 continue
     return problems
+
+
+def fetch_today_potd():
+    res = safe_request(TODAY_API)
+    if not res:
+        raise Exception("Failed to fetch today's POTD")
+    data = res.json()
+    name = data.get("problem_name")
+    link = data.get("problem_url")
+    if not name or not link:
+        raise Exception("Today's POTD parsing failed")
+    return [{
+        "date": datetime.utcnow(),
+        "name": name,
+        "link": link
+    }]
 
 
 def fetch_problem_details(link):
@@ -151,14 +167,14 @@ def generate_readme(name, details, link, date_str):
 
 def main():
     start_date, end_date = get_date_range()
-    problems = fetch_archive_problems()
-
-    # filter problems by input date range
-    problems_in_range = [p for p in problems if start_date <= p["date"] <= end_date]
-
-    if not problems_in_range:
-        print("[INFO] No POTDs found in the specified date range.")
-        return
+    if start_date and end_date:
+        problems = fetch_archive_problems()
+        problems_in_range = [p for p in problems if start_date <= p["date"] <= end_date]
+        if not problems_in_range:
+            print("[INFO] No POTDs found in the specified date range.")
+            return
+    else:
+        problems_in_range = fetch_today_potd()
 
     for prob in problems_in_range:
         today_str = prob["date"].strftime("%Y-%m-%d")
