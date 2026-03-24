@@ -47,7 +47,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4
 
-      - name: Run Script
+      - name: Run POTD Script
         env:
           GFG_SESSION: ${{ secrets.GFG_SESSION }}
           LANGUAGE: ${{ github.event.inputs.language || 'java' }}
@@ -56,7 +56,7 @@ jobs:
           END_DATE: ${{ github.event.inputs.endDate || '' }}
         run: python potd_sync.py
 
-      - name: Commit changes
+      - name: Commit and Push changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
@@ -64,10 +64,14 @@ jobs:
           git add .
 
           if git diff --cached --quiet; then
-            echo "No changes"
+            echo "No changes to commit"
             exit 0
           fi
 
           MSG=$(cat commit_msg.txt)
           git commit -m "$MSG"
+
+          # Pull latest remote changes and rebase to avoid push conflicts
+          git pull --rebase origin main
+
           git push
