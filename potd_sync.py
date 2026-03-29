@@ -17,35 +17,45 @@ def slugify(text):
 
 def get_potd():
     url = "https://practice.geeksforgeeks.org/problem-of-the-day"
-    res = requests.get(url, headers=HEADERS, timeout=10)
-    soup = BeautifulSoup(res.text, "html.parser")
+    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
 
-    # --- Robust link extraction ---
-    problem_url = None
+    html = res.text
 
-    for a in soup.find_all("a", href=True):
-        if "/problems/" in a["href"]:
-            problem_url = "https://practice.geeksforgeeks.org" + a["href"]
-            break
+    # --- Strategy 1: Extract from embedded JSON (most reliable) ---
+    match = re.search(r'"problem_url":"(.*?)"', html)
+    if match:
+        slug = match.group(1)
+        problem_url = f"https://practice.geeksforgeeks.org/problems/{slug}"
+    else:
+        problem_url = None
+
+    # --- Strategy 2: fallback anchor scan ---
+    if not problem_url:
+        soup = BeautifulSoup(html, "html.parser")
+        for a in soup.find_all("a", href=True):
+            if "/problems/" in a["href"]:
+                problem_url = "https://practice.geeksforgeeks.org" + a["href"]
+                break
 
     if not problem_url:
-        raise Exception("POTD link not found. Page structure changed.")
+        raise Exception("POTD link not found (all strategies failed)")
 
     # --- Visit problem page ---
-    prob_res = requests.get(problem_url, headers=HEADERS, timeout=10)
-    prob_soup = BeautifulSoup(prob_res.text, "html.parser")
+    prob_res = requests.get(problem_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+    prob_html = prob_res.text
+    prob_soup = BeautifulSoup(prob_html, "html.parser")
 
     # Title
     title_tag = prob_soup.find("h1")
     title = title_tag.text.strip() if title_tag else "Unknown Problem"
 
-    # Difficulty
+    # Difficulty (better regex)
     difficulty = "Unknown"
-    difficulty_tag = prob_soup.find(string=re.compile("Difficulty"))
-    if difficulty_tag:
-        difficulty = difficulty_tag.split(":")[-1].strip()
+    diff_match = re.search(r'Difficulty\s*:\s*(Easy|Medium|Hard)', prob_html)
+    if diff_match:
+        difficulty = diff_match.group(1)
 
-    # Description (trimmed for README safety)
+    # Description (safe trimmed)
     desc_div = prob_soup.find("div")
     description = desc_div.text.strip()[:2000] if desc_div else "Refer GfG"
 
