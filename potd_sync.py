@@ -6,6 +6,10 @@ import re
 BASE_DIR = os.getcwd()
 COOKIE = os.getenv("GFG_COOKIE")
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
 
 def slugify(text):
     return re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
@@ -13,22 +17,37 @@ def slugify(text):
 
 def get_potd():
     url = "https://practice.geeksforgeeks.org/problem-of-the-day"
-    res = requests.get(url)
+    res = requests.get(url, headers=HEADERS, timeout=10)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    link_tag = soup.find("a", href=True, string="Solve Problem")
-    problem_url = "https://practice.geeksforgeeks.org" + link_tag['href']
+    # --- Robust link extraction ---
+    problem_url = None
 
-    prob_res = requests.get(problem_url)
+    for a in soup.find_all("a", href=True):
+        if "/problems/" in a["href"]:
+            problem_url = "https://practice.geeksforgeeks.org" + a["href"]
+            break
+
+    if not problem_url:
+        raise Exception("POTD link not found. Page structure changed.")
+
+    # --- Visit problem page ---
+    prob_res = requests.get(problem_url, headers=HEADERS, timeout=10)
     prob_soup = BeautifulSoup(prob_res.text, "html.parser")
 
-    title = prob_soup.find("h1").text.strip()
+    # Title
+    title_tag = prob_soup.find("h1")
+    title = title_tag.text.strip() if title_tag else "Unknown Problem"
 
+    # Difficulty
+    difficulty = "Unknown"
     difficulty_tag = prob_soup.find(string=re.compile("Difficulty"))
-    difficulty = difficulty_tag.split(":")[-1].strip()
+    if difficulty_tag:
+        difficulty = difficulty_tag.split(":")[-1].strip()
 
-    desc_div = prob_soup.find("div", class_="problem-statement")
-    description = desc_div.text.strip() if desc_div else "Refer GfG"
+    # Description (trimmed for README safety)
+    desc_div = prob_soup.find("div")
+    description = desc_div.text.strip()[:2000] if desc_div else "Refer GfG"
 
     return {
         "title": title,
@@ -40,8 +59,7 @@ def get_potd():
 
 def get_accepted_solution(problem_url):
     """
-    Requires GFG_COOKIE (logged-in session cookie)
-    Attempts to fetch last accepted Java submission
+    Fetch accepted Java submission using session cookie
     """
 
     if not COOKIE:
@@ -54,24 +72,24 @@ def get_accepted_solution(problem_url):
 
     try:
         submissions_url = problem_url + "submissions/"
-        res = requests.get(submissions_url, headers=headers)
+        res = requests.get(submissions_url, headers=headers, timeout=10)
 
         if res.status_code != 200:
             return None
 
         soup = BeautifulSoup(res.text, "html.parser")
-
-        # Find accepted submission rows
         rows = soup.find_all("tr")
 
         for row in rows:
-            if "Accepted" in row.text and "Java" in row.text:
+            text = row.text
+
+            if "Accepted" in text and "Java" in text:
                 link = row.find("a", href=True)
                 if not link:
                     continue
 
-                submission_link = "https://practice.geeksforgeeks.org" + link['href']
-                code_res = requests.get(submission_link, headers=headers)
+                submission_link = "https://practice.geeksforgeeks.org" + link["href"]
+                code_res = requests.get(submission_link, headers=headers, timeout=10)
 
                 code_soup = BeautifulSoup(code_res.text, "html.parser")
                 code_tag = code_soup.find("pre")
@@ -98,26 +116,30 @@ def generate_readme(data):
 """
 
 
-def generate_stub(title):
-    return f"""class Solution {{
+def generate_stub():
+    return """class Solution {
 
-    public int solve() {{
+    public int solve() {
         // TODO: Implement solution
         return 0;
-    }}
-}}
+    }
+}
 """
 
 
 def main():
-    data = get_potd()
+    try:
+        data = get_potd()
+    except Exception as e:
+        print("Error fetching POTD:", e)
+        return
 
-    # STEP 1: Try fetching accepted solution
+    # --- Try fetching accepted solution ---
     solution_code = get_accepted_solution(data["url"])
 
-    # STEP 2: If no solution found → DO NOT SKIP (fallback to stub)
+    # --- Fallback to stub if not available ---
     if solution_code is None:
-        solution_code = generate_stub(data["title"])
+        solution_code = generate_stub()
 
     difficulty_folder = f"Difficulty: {data['difficulty']}"
     problem_folder = data["title"]
@@ -129,21 +151,25 @@ def main():
     solution_filename = slugify(data["title"]) + ".java"
     solution_path = os.path.join(full_path, solution_filename)
 
-    # Overwrite README always
+    # --- Always overwrite README ---
     with open(readme_path, "w", encoding="utf-8") as f:
         f.write(generate_readme(data))
 
-    # Only write solution if file doesn't exist OR was previously stub
+    # --- Solution handling ---
     if not os.path.exists(solution_path):
+        # First time → write whatever we have (real or stub)
         with open(solution_path, "w", encoding="utf-8") as f:
             f.write(solution_code)
     else:
+        # Replace only if existing is stub
         with open(solution_path, "r", encoding="utf-8") as f:
             existing = f.read()
 
         if "TODO: Implement solution" in existing:
             with open(solution_path, "w", encoding="utf-8") as f:
                 f.write(solution_code)
+
+    print("Sync completed successfully")
 
 
 if __name__ == "__main__":
