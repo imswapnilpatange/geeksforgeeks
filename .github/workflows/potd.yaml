@@ -3,14 +3,14 @@ name: GfG POTD Sync
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 18 * * *"  # 12 AM IST
+    - cron: "30 18 * * *"  # 12:00 AM IST
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Repo
         uses: actions/checkout@v3
 
       - name: Setup Python
@@ -18,20 +18,20 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install Dependencies
         run: |
-          pip install playwright beautifulsoup4
+          pip install requests==2.31.0 beautifulsoup4==4.12.2 playwright==1.42.0
           playwright install chromium
 
-      - name: Run script
+      - name: Run Sync Script
         env:
           GFG_COOKIE: ${{ secrets.GFG_COOKIE }}
         run: python potd_sync.py
 
-      - name: Commit
+      - name: Commit and Push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add .
-          git commit -m "Added Solution - GfG Sync" || echo "No changes"
+          git commit -m "Added Solution - GfG Sync" || echo "No changes to commit"
           git push
