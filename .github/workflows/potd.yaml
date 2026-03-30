@@ -20,12 +20,10 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests==2.31.0 beautifulsoup4==4.12.2 playwright==1.42.0
+          pip install beautifulsoup4==4.12.2 playwright==1.42.0
           playwright install chromium
 
       - name: Run Sync Script
-        env:
-          GFG_COOKIE: ${{ secrets.GFG_COOKIE }}
         run: python potd_sync.py
 
       - name: Commit and Push
