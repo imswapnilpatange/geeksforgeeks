@@ -109,6 +109,8 @@ def generate_empty_java():
 # Main
 # -----------------------------
 async def main():
+    data = None  # IMPORTANT: define upfront
+
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -121,38 +123,38 @@ async def main():
 
             await browser.close()
 
-        # -------- Global fallback --------
-        if not data:
-            print("Using fallback data")
-            data = {
-                "title": "Unknown Problem",
-                "difficulty": "Unknown",
-                "url": "https://practice.geeksforgeeks.org/problem-of-the-day",
-                "html": "<h2>Fallback Problem</h2><h3>Difficulty Level : Difficulty: Unknown</h3><hr>"
-            }
-
     except Exception as e:
         print("POTD fetch failed:", e)
-        return
 
-    difficulty_folder = f"Difficulty: {data['difficulty']}"
-    problem_folder = data["title"]
+    # -------- GLOBAL FAIL-SAFE (ALWAYS EXECUTES) --------
+    if not data:
+        print("Using fallback data")
+        data = {
+            "title": "Unknown Problem",
+            "difficulty": "Unknown",
+            "url": "https://practice.geeksforgeeks.org/problem-of-the-day",
+            "html": "<h2><a href='https://practice.geeksforgeeks.org/problem-of-the-day'>Fallback Problem</a></h2><h3>Difficulty Level : Difficulty: Unknown</h3><hr>"
+        }
+
+    # -------- SAFE USAGE --------
+    difficulty_folder = f"Difficulty: {data.get('difficulty', 'Unknown')}"
+    problem_folder = data.get("title", "Unknown Problem")
 
     full_path = os.path.join(BASE_DIR, difficulty_folder, problem_folder)
     os.makedirs(full_path, exist_ok=True)
 
     readme_path = os.path.join(full_path, "README.md")
-    solution_filename = slugify(data["title"]) + ".java"
+    solution_filename = slugify(problem_folder) + ".java"
     solution_path = os.path.join(full_path, solution_filename)
 
     # Write README
     with open(readme_path, "w", encoding="utf-8") as f:
-        f.write(generate_readme(data))
+        f.write(data.get("html", ""))
 
     # Create empty Java file if not exists
     if not os.path.exists(solution_path):
         with open(solution_path, "w", encoding="utf-8") as f:
-            f.write(generate_empty_java())
+            f.write("class Solution {\n\n}")
 
     print("Sync completed successfully")
 
