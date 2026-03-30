@@ -12,10 +12,9 @@ def slugify(text):
 
 
 # -----------------------------
-# Parse POTD + Problem Details
+# Parse POTD (HTML PRESERVATION)
 # -----------------------------
 async def parse_potd(page):
-    # Step 1: Find problem URL
     anchors = await page.query_selector_all("a")
 
     problem_url = None
@@ -31,87 +30,64 @@ async def parse_potd(page):
     if not problem_url:
         raise Exception("POTD link not found")
 
-    # Step 2: Open problem page
+    # Open problem page
     await page.goto(problem_url, timeout=60000)
     await page.wait_for_load_state("networkidle")
 
     html = await page.content()
     soup = BeautifulSoup(html, "html.parser")
 
-    # -------- Title --------
-    title_tag = soup.find("h1")
-    title = title_tag.text.strip() if title_tag else "Unknown Problem"
+    # -------- Extract exact HTML blocks --------
+    h2 = soup.find("h2")
+    h3 = soup.find("h3")
 
-    # -------- Difficulty --------
+    content_div = soup.find("div", class_=lambda x: x and "problem_content" in x)
+
+    # Extract Company + Topic tags
+    extra_html = ""
+    for p in soup.find_all("p"):
+        text = p.get_text()
+        if "Company Tags" in text or "Topic Tags" in text:
+            extra_html += str(p)
+
+    # -------- Build final HTML --------
+    final_html = ""
+
+    if h2:
+        final_html += str(h2)
+
+    if h3:
+        final_html += str(h3)
+
+    final_html += "<hr>"
+
+    if content_div:
+        final_html += str(content_div)
+
+    final_html += extra_html
+
+    # -------- Metadata --------
+    title = h2.text.strip() if h2 else "Unknown Problem"
+
     difficulty = "Unknown"
-    for tag in soup.find_all(["span", "p"]):
-        text = tag.get_text(strip=True)
-        if text in ["Easy", "Medium", "Hard"]:
-            difficulty = text
-            break
-
-    # -------- Description / Examples / Constraints --------
-    content_blocks = []
-    for div in soup.find_all("div"):
-        text = div.get_text("\n", strip=True)
-        if len(text) > 200:
-            content_blocks.append(text)
-
-    description = "\n\n".join(content_blocks[:3]) if content_blocks else "Refer problem link"
-
-    # -------- Tags --------
-    tags = []
-    for a in soup.find_all("a"):
-        text = a.get_text(strip=True)
-        if text and len(text) < 30 and text not in tags:
-            if text.lower() not in ["login", "submit"]:
-                tags.append(text)
-    tags = tags[:10]
-
-    # -------- Company Tags --------
-    companies = []
-    for span in soup.find_all("span"):
-        text = span.get_text(strip=True)
-        if text and len(text) < 25 and text not in companies:
-            if text not in ["Easy", "Medium", "Hard"]:
-                companies.append(text)
-    companies = companies[:10]
+    if h3:
+        match = re.search(r'(Easy|Medium|Hard)', h3.text)
+        if match:
+            difficulty = match.group(1)
 
     return {
         "title": title,
         "difficulty": difficulty,
         "url": problem_url,
-        "description": description,
-        "tags": tags,
-        "companies": companies
+        "html": final_html
     }
 
 
 # -----------------------------
-# README Generator
+# README (RAW HTML)
 # -----------------------------
 def generate_readme(data):
-    tags = ", ".join(data["tags"]) if data["tags"] else "Not specified"
-    companies = ", ".join(data["companies"]) if data["companies"] else "Not specified"
-
-    return f"""# {data['title']}
-
-## Difficulty
-{data['difficulty']}
-
-## Problem
-[{data['title']}]({data['url']})
-
-## Description
-{data['description']}
-
-## Tags
-{tags}
-
-## Company Tags
-{companies}
-
-"""
+    return data["html"]
 
 
 def generate_empty_java():
@@ -151,7 +127,7 @@ async def main():
     solution_filename = slugify(data["title"]) + ".java"
     solution_path = os.path.join(full_path, solution_filename)
 
-    # Write README
+    # Write README (HTML preserved)
     with open(readme_path, "w", encoding="utf-8") as f:
         f.write(generate_readme(data))
 
