@@ -41,21 +41,24 @@ async def parse_potd(page):
         # -------- Title --------
         title = "Unknown Problem"
         h1 = soup.find("h1")
-        if h1:
+        if h1 and h1.get_text(strip=True):
             title = h1.get_text(strip=True)
+        else:
+            # fallback from URL slug
+            slug = problem_url.split("/problems/")[-1].strip("/")
+            title = slug.replace("-", " ").title()
 
         # -------- Difficulty --------
         difficulty = "Unknown"
-        h3 = soup.find("h3")
-        if h3:
-            match = re.search(r'(Easy|Medium|Hard)', h3.get_text())
-            if match:
-                difficulty = match.group(1)
+        page_text = soup.get_text()
+        match = re.search(r'Difficulty\s*:\s*(Easy|Medium|Hard)', page_text)
+        
+        if match:
+            difficulty = match.group(1)
 
         # -------- Build HEADER (manual h2) --------
         header_html = f'<h2><a href="{problem_url}">{title}</a></h2>'
-
-        difficulty_html = str(h3) if h3 else f"<h3>Difficulty Level : Difficulty: {difficulty}</h3>"
+        difficulty_html = f'<h3>Difficulty Level : Difficulty: {difficulty}</h3>'
 
         # -------- Content --------
         content_div = soup.find("div", class_=lambda x: x and "problem_content" in x)
