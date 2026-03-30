@@ -12,102 +12,87 @@ def slugify(text):
 
 
 # -----------------------------
-# Parse POTD (HTML PRESERVATION)
+# Parse POTD (HTML PRESERVATION + SAFE)
 # -----------------------------
 async def parse_potd(page):
-    anchors = await page.query_selector_all("a")
+    try:
+        anchors = await page.query_selector_all("a")
 
-    problem_url = None
-    for a in anchors:
-        href = await a.get_attribute("href")
-        if href and "/problems/" in href:
-            if href.startswith("http"):
-                problem_url = href
-            else:
-                problem_url = "https://practice.geeksforgeeks.org" + href
-            break
+        problem_url = None
+        for a in anchors:
+            href = await a.get_attribute("href")
+            if href and "/problems/" in href:
+                if href.startswith("http"):
+                    problem_url = href
+                else:
+                    problem_url = "https://practice.geeksforgeeks.org" + href
+                break
 
-    if not problem_url:
-        raise Exception("POTD link not found")
+        if not problem_url:
+            raise Exception("POTD link not found")
 
-    # Open problem page
-    await page.goto(problem_url, timeout=60000)
-    await page.wait_for_load_state("networkidle")
+        # Open problem page
+        await page.goto(problem_url, timeout=60000)
+        await page.wait_for_load_state("networkidle")
 
-    html = await page.content()
-    soup = BeautifulSoup(html, "html.parser")
+        html = await page.content()
+        soup = BeautifulSoup(html, "html.parser")
 
-    # -------- Extract exact HTML blocks --------
-    h2 = soup.find("h2")
-    h3 = soup.find("h3")
+        # -------- Title --------
+        title = "Unknown Problem"
+        h1 = soup.find("h1")
+        if h1:
+            title = h1.get_text(strip=True)
 
-    content_div = soup.find("div", class_=lambda x: x and "problem_content" in x)
-
-    # Extract Company + Topic tags
-    extra_html = ""
-    for p in soup.find_all("p"):
-        text = p.get_text()
-        if "Company Tags" in text or "Topic Tags" in text:
-            extra_html += str(p)
-
-    # -------- Metadata --------
-    title = "Unknown Problem"
-    if soup.find("h1"):
-        title = soup.find("h1").text.strip()
-    
-    difficulty = "Unknown"
-    if soup.find("h3"):
-        match = re.search(r'(Easy|Medium|Hard)', soup.find("h3").text)
-        if match:
-            difficulty = match.group(1)
-    
-    # -------- Build REQUIRED HEADER (CRITICAL FIX) --------
-    header_html = f'<h2><a href="{problem_url}">{title}</a></h2>'
-    
-    difficulty_html = ""
-    h3 = soup.find("h3")
-    if h3:
-        difficulty_html = str(h3)
-    else:
-        difficulty_html = f"<h3>Difficulty Level : Difficulty: {difficulty}</h3>"
-    
-    # -------- Extract content --------
-    content_div = soup.find("div", class_=lambda x: x and "problem_content" in x)
-    
-    extra_html = ""
-    for p in soup.find_all("p"):
-        text = p.get_text()
-        if "Company Tags" in text or "Topic Tags" in text:
-            extra_html += str(p)
-    
-    # -------- Final HTML --------
-    final_html = ""
-    final_html += header_html
-    final_html += difficulty_html
-    final_html += "<hr>"
-    
-    if content_div:
-        final_html += str(content_div)
-    
-    final_html += extra_html
-    if not title:
-    title = "Unknown Problem"
-
-    if not difficulty:
+        # -------- Difficulty --------
         difficulty = "Unknown"
-    
-    if not final_html:
-        final_html = f'<h2><a href="{problem_url}">{title}</a></h2><h3>Difficulty Level : Difficulty: {difficulty}</h3><hr>'
-    
-    return {
-        "title": title,
-        "difficulty": difficulty,
-        "url": problem_url,
-        "html": final_html
-    }
+        h3 = soup.find("h3")
+        if h3:
+            match = re.search(r'(Easy|Medium|Hard)', h3.get_text())
+            if match:
+                difficulty = match.group(1)
+
+        # -------- Build HEADER (manual h2) --------
+        header_html = f'<h2><a href="{problem_url}">{title}</a></h2>'
+
+        difficulty_html = str(h3) if h3 else f"<h3>Difficulty Level : Difficulty: {difficulty}</h3>"
+
+        # -------- Content --------
+        content_div = soup.find("div", class_=lambda x: x and "problem_content" in x)
+
+        # -------- Tags --------
+        extra_html = ""
+        for p in soup.find_all("p"):
+            text = p.get_text()
+            if "Company Tags" in text or "Topic Tags" in text:
+                extra_html += str(p)
+
+        # -------- Final HTML --------
+        final_html = header_html + difficulty_html + "<hr>"
+
+        if content_div:
+            final_html += str(content_div)
+
+        final_html += extra_html
+
+        # -------- Fallback safety --------
+        if not final_html.strip():
+            final_html = f'<h2><a href="{problem_url}">{title}</a></h2><h3>Difficulty Level : Difficulty: {difficulty}</h3><hr>'
+
+        return {
+            "title": title,
+            "difficulty": difficulty,
+            "url": problem_url,
+            "html": final_html
+        }
+
+    except Exception as e:
+        print("Parse error:", e)
+        return None
+
 
 # -----------------------------
-# README (RAW HTML)
+# README
 # -----------------------------
 def generate_readme(data):
     return data["html"]
@@ -134,16 +119,17 @@ async def main():
 
             data = await parse_potd(page)
 
-            if not data:
-                print("Parse failed. Using fallback.")
-                data = {
-                    "title": "Unknown Problem",
-                    "difficulty": "Unknown",
-                    "url": "https://practice.geeksforgeeks.org/problem-of-the-day",
-                    "html": "<h2>Fallback Problem</h2><h3>Difficulty Level : Difficulty: Unknown</h3><hr>"
-                }
-
             await browser.close()
+
+        # -------- Global fallback --------
+        if not data:
+            print("Using fallback data")
+            data = {
+                "title": "Unknown Problem",
+                "difficulty": "Unknown",
+                "url": "https://practice.geeksforgeeks.org/problem-of-the-day",
+                "html": "<h2>Fallback Problem</h2><h3>Difficulty Level : Difficulty: Unknown</h3><hr>"
+            }
 
     except Exception as e:
         print("POTD fetch failed:", e)
@@ -159,7 +145,7 @@ async def main():
     solution_filename = slugify(data["title"]) + ".java"
     solution_path = os.path.join(full_path, solution_filename)
 
-    # Write README (HTML preserved)
+    # Write README
     with open(readme_path, "w", encoding="utf-8") as f:
         f.write(generate_readme(data))
 
