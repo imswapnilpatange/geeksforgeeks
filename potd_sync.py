@@ -90,7 +90,21 @@ async def parse_potd(page):
         final_html += str(content_div)
     
     final_html += extra_html
+    if not title:
+    title = "Unknown Problem"
 
+    if not difficulty:
+        difficulty = "Unknown"
+    
+    if not final_html:
+        final_html = f'<h2><a href="{problem_url}">{title}</a></h2><h3>Difficulty Level : Difficulty: {difficulty}</h3><hr>'
+    
+    return {
+        "title": title,
+        "difficulty": difficulty,
+        "url": problem_url,
+        "html": final_html
+    }
 
 # -----------------------------
 # README (RAW HTML)
@@ -119,6 +133,15 @@ async def main():
             await page.wait_for_load_state("networkidle")
 
             data = await parse_potd(page)
+
+            if not data:
+                print("Parse failed. Using fallback.")
+                data = {
+                    "title": "Unknown Problem",
+                    "difficulty": "Unknown",
+                    "url": "https://practice.geeksforgeeks.org/problem-of-the-day",
+                    "html": "<h2>Fallback Problem</h2><h3>Difficulty Level : Difficulty: Unknown</h3><hr>"
+                }
 
             await browser.close()
 
