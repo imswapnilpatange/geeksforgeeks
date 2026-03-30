@@ -50,37 +50,46 @@ async def parse_potd(page):
         if "Company Tags" in text or "Topic Tags" in text:
             extra_html += str(p)
 
-    # -------- Build final HTML --------
-    final_html = ""
-
-    if h2:
-        final_html += str(h2)
-
-    if h3:
-        final_html += str(h3)
-
-    final_html += "<hr>"
-
-    if content_div:
-        final_html += str(content_div)
-
-    final_html += extra_html
-
     # -------- Metadata --------
-    title = h2.text.strip() if h2 else "Unknown Problem"
-
+    title = "Unknown Problem"
+    if soup.find("h1"):
+        title = soup.find("h1").text.strip()
+    
     difficulty = "Unknown"
-    if h3:
-        match = re.search(r'(Easy|Medium|Hard)', h3.text)
+    if soup.find("h3"):
+        match = re.search(r'(Easy|Medium|Hard)', soup.find("h3").text)
         if match:
             difficulty = match.group(1)
-
-    return {
-        "title": title,
-        "difficulty": difficulty,
-        "url": problem_url,
-        "html": final_html
-    }
+    
+    # -------- Build REQUIRED HEADER (CRITICAL FIX) --------
+    header_html = f'<h2><a href="{problem_url}">{title}</a></h2>'
+    
+    difficulty_html = ""
+    h3 = soup.find("h3")
+    if h3:
+        difficulty_html = str(h3)
+    else:
+        difficulty_html = f"<h3>Difficulty Level : Difficulty: {difficulty}</h3>"
+    
+    # -------- Extract content --------
+    content_div = soup.find("div", class_=lambda x: x and "problem_content" in x)
+    
+    extra_html = ""
+    for p in soup.find_all("p"):
+        text = p.get_text()
+        if "Company Tags" in text or "Topic Tags" in text:
+            extra_html += str(p)
+    
+    # -------- Final HTML --------
+    final_html = ""
+    final_html += header_html
+    final_html += difficulty_html
+    final_html += "<hr>"
+    
+    if content_div:
+        final_html += str(content_div)
+    
+    final_html += extra_html
 
 
 # -----------------------------
