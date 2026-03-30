@@ -161,23 +161,7 @@ async def main():
         with open(solution_path, "w", encoding="utf-8") as f:
             f.write("class Solution {\n\n}")
     
-    # -------- metadata.json --------
-    metadata = {
-        "title": data.get("title", "Unknown Problem"),
-        "url": data.get("url", ""),
-        "difficulty": data.get("difficulty", "Unknown"),
-        "date": datetime.today().strftime("%Y-%m-%d"),
-        "language": "Java",
-        "source": "GeeksforGeeks POTD"
-    }
-    
-    metadata_path = os.path.join(full_path, "metadata.json")
-    
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=4)
-    
     print("Sync completed successfully")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
