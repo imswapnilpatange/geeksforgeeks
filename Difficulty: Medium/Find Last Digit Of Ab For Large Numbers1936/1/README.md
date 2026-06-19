@@ -1,0 +1,9 @@
+<h2><a href="https://www.geeksforgeeks.org/problems/find-last-digit-of-ab-for-large-numbers1936/1">Find Last Digit Of Ab For Large Numbers1936/1</a></h2><h3>Difficulty Level : Difficulty: Medium</h3><hr><div class="problems_problem_content__Xm_eO" style="--text-color: var(--problem-text-color);"><p><span style="font-size: 18px;">Given two integers a and b in the form of strings. Return the last digit of a<sup>b</sup>.</span></p>
+<p><span style="font-size: 18px;"><strong>Examples:<br/></strong></span></p>
+<pre><span style="font-size: 18px;"><strong>Input:</strong> </span><span style="font-size: 18px;">a = "3", b = "10"</span>
+<span style="font-size: 18px;"><strong>Output:</strong> </span><span style="font-size: 18px;">9</span>
+<span style="font-size: 18px;"><strong>Explanation:</strong> </span><span style="font-size: 18px;">3<sup>10</sup> = 59049. Last digit is 9.</span></pre>
+<pre><span style="font-size: 18px;"><strong>Input:</strong> </span><span style="font-size: 18px;">a = "6", b = "2"</span>
+<span style="font-size: 18px;"><strong>Output:</strong> </span><span style="font-size: 18px;">6</span>
+<span style="font-size: 18px;"><strong>Explanation:</strong> </span><span style="font-size: 18px;">6<sup>2</sup> = 36. Last digit is 6.</span></pre>
+<p><span style="font-size: 18px;"><strong>Constraints:</strong></span><br/><span style="font-size: 18px;">1 <span style="font-size: 18.6667px;">≤</span> a.size(), b.size() </span><span style="font-size: 18.6667px;">≤</span><span style="font-size: 18px;"> 1000<br/>a and b consist only of numeric digits ('0' - '9')<br/>a and b do not contain any leading zeros, except when number itself is "0"</span></p></div>
