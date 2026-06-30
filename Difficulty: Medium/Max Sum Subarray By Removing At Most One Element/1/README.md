@@ -1,0 +1,10 @@
+<h2><a href="https://www.geeksforgeeks.org/problems/max-sum-subarray-by-removing-at-most-one-element/1">Max Sum Subarray By Removing At Most One Element/1</a></h2><h3>Difficulty Level : Difficulty: Medium</h3><hr><div class="problems_problem_content__Xm_eO" style="--text-color: var(--problem-text-color);"><p><span style="font-size: 14pt;">Given an array <strong>arr[],</strong> find the <strong>maximum sum</strong> of a non-empty subarray. You are allowed to skip <strong data-end="135" data-start="112">at most one element</strong> in the subarray.</span></p>
+<p><span style="font-size: 18px;"><strong>Note:</strong> </span><span style="font-size: 14pt;">After skipping the element, the subarray must still be <strong data-end="223" data-start="210">non-empty</strong>.</span></p>
+<p><span style="font-size: 18px;"><strong>Examples:</strong></span></p>
+<pre><span style="font-size: 18px;"><strong>Input: </strong>arr[] = [1, 2, 3, -4, 5]
+<strong>Output: </strong>11<strong>
+Explanation: </strong>We can get maximum sum subarray by skipping -4.</span></pre>
+<pre><span style="font-size: 18px;"><strong>Input: </strong>arr[] = [-2, -3, 4, -1, -2, 1, 5, -3]
+<strong>Output: </strong>9<strong>
+Explanation: </strong>We can get maximum sum subarray by skipping -2 as [4,-1,1,5] sums to 9, which is the maximum achievable sum.</span></pre>
+<p><span style="font-size: 18px;"><strong>Constraints:</strong><br/>1 <span style="color: #273239; font-family: Nunito; font-size: 17px; background-color: #ffffff;">≤</span> arr.size() <span style="color: #273239; font-family: Nunito; font-size: 17px; background-color: #ffffff;">≤</span> 10<sup>6</sup><br/>-10<sup>3</sup> <span style="color: #273239; font-family: Nunito; font-size: 17px; background-color: #ffffff;">≤</span> arr[i] <span style="color: #273239; font-family: Nunito; font-size: 17px; background-color: #ffffff;">≤</span> 10<sup>3</sup></span></p></div>
